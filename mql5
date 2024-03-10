@@ -1,0 +1,141 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                               No Loss EA Hedging Strategy SP500 MT4                                         |
+//|                                      https://www.forexroboteasy.com/                                                      |
+//|                                              Developed by Forex Robot Easy Team                                              |
+//+------------------------------------------------------------------+
+
+// Define input parameters
+input double StopLoss = 100; // Stop loss in pips
+input double TakeProfit = 200; // Take profit in pips
+input double TrailingStop = 50; // Trailing stop in pips
+input double RiskPercentage = 2; // Risk percentage per trade
+input double MaxSpread = 5; // Maximum allowed spread
+input double MaxSlippage = 3; // Maximum allowed slippage
+
+// Define global variables
+double lotSize; // Lot size for each trade
+double entryPrice; // Entry price for the initial trade
+double stopLossPrice; // Stop loss price for the initial trade
+double takeProfitPrice; // Take profit price for the initial trade
+double trailingStopPrice; // Trailing stop price for the initial trade
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+void OnInit()
+{
+    // Calculate lot size based on risk percentage
+    lotSize = AccountBalance() * RiskPercentage / 100 / StopLoss / MarketInfo(Symbol(), MODE_TICKVALUE);
+
+    // Set initial trade parameters
+    entryPrice = 0;
+    stopLossPrice = 0;
+    takeProfitPrice = 0;
+    trailingStopPrice = 0;
+
+    // Enable hedging
+    if (!IsHedgeEnabled())
+    {
+        HedgeAllowed(true);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    // Close all open positions
+    for (int i = 0; i < OrdersTotal(); i++)
+    {
+        if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+        {
+            if (OrderSymbol() == Symbol())
+            {
+                OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), MaxSlippage);
+            }
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Expert start function                                            |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+    // Check if there are any open positions
+    bool hasOpenPositions = false;
+    for (int i = 0; i < OrdersTotal(); i++)
+    {
+        if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+        {
+            if (OrderSymbol() == Symbol() && OrderType() <= OP_SELL)
+            {
+                hasOpenPositions = true;
+                break;
+            }
+        }
+    }
+
+    // Check if there are any open orders
+    bool hasOpenOrders = false;
+    for (int i = 0; i < OrdersTotal(); i++)
+    {
+        if (OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+        {
+            if (OrderSymbol() == Symbol() && OrderType() <= OP_SELL)
+            {
+                hasOpenOrders = true;
+                break;
+            }
+        }
+    }
+
+    // Check if entry conditions are met
+    if (!hasOpenPositions && !hasOpenOrders)
+    {
+        // TODO: Implement entry conditions
+        // If entry conditions are met, open initial trade with specified lot size, stop loss and take profit
+        entryPrice = MarketInfo(Symbol(), MODE_BID);
+        stopLossPrice = entryPrice - StopLoss * MarketInfo(Symbol(), MODE_POINT);
+        takeProfitPrice = entryPrice + TakeProfit * MarketInfo(Symbol(), MODE_POINT);
+        OrderSend(Symbol(), OP_BUY, lotSize, entryPrice, MaxSlippage, stopLossPrice, takeProfitPrice, 'Initial Trade', 0, 0, Green);
+    }
+
+    // Check if exit conditions are met
+    if (hasOpenPositions)
+    {
+        // TODO: Implement exit conditions
+        // If exit conditions are met, close all open positions
+        for (int i = 0; i < OrdersTotal(); i++)
+        {
+            if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+            {
+                if (OrderSymbol() == Symbol())
+                {
+                    OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), MaxSlippage);
+                }
+            }
+        }
+    }
+
+    // Check if trailing stop conditions are met
+    if (hasOpenPositions)
+    {
+        // Calculate trailing stop price
+        trailingStopPrice = entryPrice + TrailingStop * MarketInfo(Symbol(), MODE_POINT);
+
+        // Modify stop loss to trailing stop price
+        for (int i = 0; i < OrdersTotal(); i++)
+        {
+            if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+            {
+                if (OrderSymbol() == Symbol())
+                {
+                    OrderModify(OrderTicket(), OrderOpenPrice(), trailingStopPrice, OrderTakeProfit(), 0, Green);
+                }
+            }
+        }
+    }
+}
